@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "character.h"
-#include "coordinates.h"
+#include "coords_fwd.h"
 #include "npc.h"
 #include "talker.h"
 #include "type_id.h"
@@ -71,6 +71,7 @@ class talker_character_const: public talker_cloner<talker_character_const>
         int per_cur() const override;
         int attack_speed() const override;
         int pain_cur() const override;
+        int perceived_pain_cur() const override;
         double armor_at( damage_type_id &dt, bodypart_id &bp ) const override;
         int coverage_at( bodypart_id & ) const override;
         int encumbrance_at( bodypart_id & ) const override;
@@ -103,6 +104,7 @@ class talker_character_const: public talker_cloner<talker_character_const>
         int get_spell_exp( const spell_id & ) const override;
         int get_highest_spell_level() const override;
         int get_spell_count( const trait_id & ) const override;
+        int get_spell_sum( const trait_id &school, int min_level ) const override;
         bool knows_proficiency( const proficiency_id &proficiency ) const override;
         time_duration proficiency_practiced_time( const proficiency_id & ) const override;
 
@@ -238,6 +240,7 @@ class talker_character: public talker_cloner<talker_character, talker_character_
         void set_spell_level( const spell_id &, int ) override;
         void set_spell_exp( const spell_id &, int ) override;
         void set_proficiency_practiced_time( const proficiency_id &prof, int turns ) override;
+        void train_proficiency_for( const proficiency_id &prof, int turns ) override;
         void mutate( const int &highest_cat_chance, const bool &use_vitamins ) override;
         void mutate_category( const mutation_category_id &mut_cat, const bool &use_vitamins ) override;
         void mutate_towards( const trait_id &trait, const mutation_category_id &mut_cat,

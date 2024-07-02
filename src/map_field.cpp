@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "avatar.h"
 #include "bodypart.h"
 #include "calendar.h"
 #include "cata_utility.h"
@@ -77,10 +78,14 @@ static const efftype_id effect_corroding( "corroding" );
 static const efftype_id effect_fungus( "fungus" );
 static const efftype_id effect_onfire( "onfire" );
 static const efftype_id effect_poison( "poison" );
+static const efftype_id effect_quadruped_full( "quadruped_full" );
+static const efftype_id effect_quadruped_half( "quadruped_half" );
 static const efftype_id effect_stunned( "stunned" );
 static const efftype_id effect_teargas( "teargas" );
 
 static const flag_id json_flag_NO_UNLOAD( "NO_UNLOAD" );
+
+static const furn_str_id furn_f_ash( "f_ash" );
 
 static const itype_id itype_rm13_armor_on( "rm13_armor_on" );
 static const itype_id itype_rock( "rock" );
@@ -655,6 +660,9 @@ static void field_processor_fd_electricity( const tripoint &p, field_entry &cur,
 
     bool valid_candidates = false;
     for( const tripoint &dst : points_in_radius( p, 1 ) ) {
+        if( !pd.here.inbounds( dst ) ) {
+            continue;
+        }
         // Skip tiles with intense fields
         const field_type_str_id &field_type = pd.here.get_applicable_electricity_field( dst );
         if( field_entry *field = pd.here.get_field( dst, field_type ) ) {
@@ -764,7 +772,8 @@ static void field_processor_monster_spawn( const tripoint &p, field_entry &cur,
                 [&pd]( const tripoint & n ) {
                 return pd.here.passable( n );
                 } ) ) {
-                    pd.here.add_spawn( mgr, *spawn_point );
+                    const tripoint_bub_ms pt = tripoint_bub_ms( spawn_point.value() );
+                    pd.here.add_spawn( mgr, pt );
                 }
             }
         }
@@ -918,7 +927,7 @@ static void field_processor_fd_fungicidal_gas( const tripoint &p, field_entry &c
         pd.here.ter_set( p, ter_t_dirt );
     }
     if( frn.has_flag( ter_furn_flag::TFLAG_FUNGUS ) && one_in( 10 / intensity ) ) {
-        pd.here.furn_set( p, f_null );
+        pd.here.furn_set( p, furn_str_id::NULL_ID() );
     }
 }
 
@@ -1058,14 +1067,14 @@ void field_processor_fd_fire( const tripoint &p, field_entry &cur, field_proc_da
                 here.spawn_item( p, "ash", 1, rng( 10, 1000 ) );
                 if( p.z > 0 ) {
                     // We're in the air. Need to invalidate the furniture otherwise it'll cause problems
-                    here.furn_set( p, f_null );
+                    here.furn_set( p, furn_str_id::NULL_ID() );
                     here.ter_set( p, ter_t_open_air );
                 } else if( p.z < -1 ) {
                     // We're deep underground, in bedrock. Whatever terrain was here is burned to the ground, leaving only the carved out rock (including ceiling)
                     here.ter_set( p, ter_t_rock_floor );
                 } else {
                     // Need to invalidate the furniture otherwise it'll cause problems when supporting terrain collapses
-                    here.furn_set( p, f_null );
+                    here.furn_set( p, furn_str_id::NULL_ID() );
                     here.ter_set( p, ter_t_dirt );
                 }
             }
@@ -1077,7 +1086,7 @@ void field_processor_fd_fire( const tripoint &p, field_entry &cur, field_proc_da
             smoke += static_cast<int>( windpower / 5 );
             if( cur.get_field_intensity() > 1 &&
                 one_in( 200 - cur.get_field_intensity() * 50 ) ) {
-                here.furn_set( p, f_ash );
+                here.furn_set( p, furn_f_ash );
                 here.add_item_or_charges( p, item( "ash" ) );
             }
 
@@ -1463,15 +1472,16 @@ void map::player_in_field( Character &you )
             // you're certainly not standing in it.
             if( !you.in_vehicle && !you.has_trait( trait_ACIDPROOF ) ) {
                 int total_damage = 0;
-                total_damage += burn_body_part( you, cur, bodypart_id( "foot_l" ), 2 );
-                total_damage += burn_body_part( you, cur, bodypart_id( "foot_r" ), 2 );
                 const bool on_ground = you.is_on_ground();
-                if( on_ground ) {
+                if( !on_ground ) {
+                    for( const bodypart_id &bp : you.get_ground_contact_bodyparts() ) {
+                        total_damage += burn_body_part( you, cur, bp, 2 );
+                    }
+                } else {
                     // Apply the effect to the remaining body parts
-                    total_damage += burn_body_part( you, cur, bodypart_id( "leg_l" ), 2 );
-                    total_damage += burn_body_part( you, cur, bodypart_id( "leg_r" ), 2 );
-                    total_damage += burn_body_part( you, cur, bodypart_id( "hand_l" ), 2 );
-                    total_damage += burn_body_part( you, cur, bodypart_id( "hand_r" ), 2 );
+                    for( const bodypart_id &bp : you.get_ground_contact_bodyparts( true ) ) {
+                        total_damage += burn_body_part( you, cur, bp, 2 );
+                    }
                     total_damage += burn_body_part( you, cur, bodypart_id( "torso" ), 2 );
                     // Less arms = less ability to keep upright
                     if( ( !you.has_two_arms_lifting() && one_in( 4 ) ) || one_in( 2 ) ) {
@@ -1485,8 +1495,11 @@ void map::player_in_field( Character &you )
                     you.add_msg_player_or_npc( m_bad, _( "The acid burns your body!" ),
                                                _( "The acid burns <npcname>'s body!" ) );
                 } else if( total_damage > 0 ) {
-                    you.add_msg_player_or_npc( m_bad, _( "The acid burns your legs and feet!" ),
-                                               _( "The acid burns <npcname>'s legs and feet!" ) );
+                    std::vector<bodypart_id> bps = you.get_ground_contact_bodyparts();
+                    you.add_msg_player_or_npc( m_bad,
+                                               string_format( _( "The acid burns your %s!" ), you.string_for_ground_contact_bodyparts( bps ) ),
+                                               string_format( _( "The acid burns <npcname>'s %s!" ),
+                                                       you.string_for_ground_contact_bodyparts( bps ) ) );
                 } else if( on_ground ) {
                     you.add_msg_if_player( m_warning, _( "You're lying in a pool of acid!" ) );
                 } else if( !you.is_immune_field( fd_acid ) ) {
@@ -1571,6 +1584,11 @@ void map::player_in_field( Character &you )
                                 parts_burned.emplace_back( "leg_l" );
                                 parts_burned.emplace_back( "leg_r" );
                         }
+                    } else if( you.has_effect( effect_quadruped_full ) ||  you.has_effect( effect_quadruped_half ) ) {
+                        // Moving on all-fours through a fire is a bad idea, hits every body part.
+                        msg_num = 3;
+                        const std::vector<bodypart_id> all_parts = you.get_all_body_parts();
+                        parts_burned.assign( all_parts.begin(), all_parts.end() );
                     } else {
                         // Lying in the fire is BAAAD news, hits every body part.
                         msg_num = 3;
@@ -1666,7 +1684,7 @@ void map::player_in_field( Character &you )
                 }
             }
         }
-        if( ft == fd_reality_tear ) {
+        if( ft == fd_fatigue ) {
             // Assume the rift is on the ground for now to prevent issues with the player being unable access vehicle controls on the same tile due to teleportation.
             if( !you.in_vehicle ) {
                 // Teleports you... somewhere.
@@ -1986,7 +2004,7 @@ void map::monster_in_field( monster &z )
                                                     cur.get_field_intensity() ) );
             z.deal_damage( nullptr, bodypart_id( "torso" ), damage_instance( damage_electric, field_dmg ) );
         }
-        if( cur_field_type == fd_reality_tear ) {
+        if( cur_field_type == fd_fatigue ) {
             if( rng( 0, 2 ) < cur.get_field_intensity() ) {
                 dam += cur.get_field_intensity();
                 teleport::teleport( z );
@@ -2098,10 +2116,11 @@ void map::emit_field( const tripoint &pos, const emit_id &src, float mul )
         return;
     }
 
-    const float chance = src->chance() * mul;
-    if( src.is_valid() &&  x_in_y( chance, 100 ) ) {
-        const int qty = chance > 100.0f ? roll_remainder( src->qty() * chance / 100.0f ) : src->qty();
-        propagate_field( pos, src->field(), qty, src->intensity() );
+    dialogue d( get_talker_for( get_avatar() ), nullptr );
+    const float chance = src->chance( d ) * mul;
+    if( x_in_y( chance, 100 ) ) {
+        const int qty = chance > 100.0f ? roll_remainder( src->qty( d ) * chance / 100.0f ) : src->qty( d );
+        propagate_field( pos, src->field( d ), qty, src->intensity( d ) );
     }
 }
 
