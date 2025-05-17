@@ -1194,7 +1194,7 @@ std::vector<std::string> monster::extended_description() const
 
     using flag_description = std::pair<const mon_flag_id, std::string>;
     const auto describe_flags = [this, &tmp](
-                                    const std::string_view format,
+                                    std::string_view format,
                                     const std::vector<flag_description> &flags_names,
     const std::string &if_empty = "" ) {
         std::string flag_descriptions = enumerate_as_string( flags_names.begin(),
@@ -1210,7 +1210,7 @@ std::vector<std::string> monster::extended_description() const
 
     using property_description = std::pair<bool, std::string>;
     const auto describe_properties = [&tmp](
-                                         const std::string_view format,
+                                         std::string_view format,
                                          const std::vector<property_description> &property_names,
     const std::string &if_empty = "" ) {
         std::string property_descriptions = enumerate_as_string( property_names.begin(),
@@ -1420,7 +1420,26 @@ bool monster::can_dig() const
 
 bool monster::digs() const
 {
-    return has_flag( mon_flag_DIGS );
+    return has_flag( mon_flag_DIGS ) || type->move_skills.dig.has_value() ;
+}
+
+int monster::get_dig_mod() const
+{
+    if( type->move_skills.dig.has_value() ) {
+        int percentile = type->move_skills.dig.value() * ( max_obstacle_penalty / 10 );
+        return max_obstacle_penalty - percentile;
+    } else if( has_flag( mon_flag_DIGS ) || has_flag( mon_flag_CAN_DIG ) ) {
+        return 1;
+    }
+
+    // cannot dig
+    return -1;
+}
+
+int monster::dig_skill() const
+{
+    return type->move_skills.dig.value_or( has_flag( mon_flag_DIGS ) ||
+                                           has_flag( mon_flag_CAN_DIG ) ? 9 : -1 );
 }
 
 bool monster::flies() const
@@ -1430,12 +1449,56 @@ bool monster::flies() const
 
 bool monster::climbs() const
 {
-    return has_flag( mon_flag_CLIMBS );
+    return has_flag( mon_flag_CLIMBS ) || type->move_skills.climb.has_value();
+}
+
+int monster::climb_skill() const
+{
+    return type->move_skills.climb.value_or( has_flag( mon_flag_CLIMBS ) ? 9 : -1 );
+}
+
+
+int monster::get_climb_mod() const
+{
+    if( type->move_skills.climb.has_value() ) {
+        int percentile = type->move_skills.climb.value() * ( max_obstacle_penalty / 10 );
+        return max_obstacle_penalty - percentile;
+    } else if( has_flag( mon_flag_CLIMBS ) ) {
+        // only for backwards compatibility. In future move away from flags
+        return 1;
+    }
+
+    // cannot climb
+    return -1;
 }
 
 bool monster::swims() const
 {
-    return has_flag( mon_flag_SWIMS );
+    return has_flag( mon_flag_SWIMS ) || type->move_skills.swim.has_value();
+}
+
+int monster::swim_skill() const
+{
+    return type->move_skills.swim.value_or( has_flag( mon_flag_SWIMS ) ? 10 : -1 );
+}
+
+int monster::get_swim_mod() const
+{
+    if( type->move_skills.swim.has_value() ) {
+        int percentile = type->move_skills.swim.value() * ( max_obstacle_penalty / 10 );
+        return max_obstacle_penalty - percentile;
+
+    } else if( has_flag( mon_flag_SWIMS ) ) {
+        // only for backwards compatibility. In future move away from flags
+        // vanilla fish have fastest possible swimspeed
+        return 0;
+    } else if( can_submerge() ) {
+        // monsters that can submerge can walk underwater. Simulated with min swimskill
+        return max_obstacle_penalty;
+    }
+
+    // cannot swim
+    return -1;
 }
 
 bool monster::can_act() const
@@ -2405,6 +2468,12 @@ bool monster::move_effects( bool )
         return true;
     }
 
+    // If the monster has the CANNOT_MOVE flag, they can't
+    // perform any move effects, so skip this step
+    if( has_effect_with_flag( json_flag_CANNOT_MOVE ) ) {
+        return false;
+    }
+
     map &here = get_map();
     bool u_see_me = get_player_view().sees( here, *this );
     if( has_effect( effect_tied ) ) {
@@ -2806,7 +2875,7 @@ void monster::disable_special( const std::string &special_name )
     special_attacks.at( special_name ).enabled = false;
 }
 
-bool monster::special_available( const std::string_view special_name ) const
+bool monster::special_available( std::string_view special_name ) const
 {
     std::map<std::string, mon_special_attack>::const_iterator iter = special_attacks.find(
                 special_name );
@@ -3312,7 +3381,7 @@ void monster::spawn_dissectables_on_death( item *corpse ) const
                 dissectable.set_flag( flg );
             }
             for( const fault_id &flt : entry.faults ) {
-                dissectable.faults.emplace( flt );
+                dissectable.set_fault( flt );
             }
             if( corpse ) {
                 corpse->put_in( dissectable, pocket_type::CORPSE );

@@ -1438,6 +1438,7 @@
     "weight": "120 kg",
     "hp": 160,
     "speed": 140,
+    "move_skills": { "climb": 8 },
     "material": [ "flesh" ],
     "symbol": "&",
     "color": "dark_gray",
@@ -1465,8 +1466,7 @@
       "ATTACKMON",
       "PLASTIC",
       "ACIDPROOF",
-      "NOGIB",
-      "CLIMBS"
+      "NOGIB"
     ],
     "armor": { "bash": 8, "electric": 1 }
   },
@@ -1482,6 +1482,7 @@
     "weight": "81500 g",
     "hp": 70,
     "speed": 90,
+    "move_skills": { "climb": 8 },
     "material": [ "flesh" ],
     "symbol": "h",
     "color": "light_red",
@@ -1495,7 +1496,7 @@
     "harvest": "demihuman",
     "families": [ "prof_gross_anatomy", "prof_intro_biology", "prof_physiology", "prof_wp_demihuman" ],
     "weakpoint_sets": [ "wps_humanoid_body" ],
-    "flags": [ "SEES", "HEARS", "GOODHEARING", "POISON", "HUMAN", "CLIMBS" ]
+    "flags": [ "SEES", "HEARS", "GOODHEARING", "POISON", "HUMAN" ]
   },
   {
     "id": "mon_yugg",
@@ -1510,6 +1511,7 @@
     "weight": "800 kg",
     "hp": 320,
     "speed": 80,
+    "move_skills": { "dig": 9 },
     "material": [ "flesh" ],
     "symbol": "W",
     "color": "white",
@@ -2209,7 +2211,7 @@
     "bleed_rate": 40,
     "vision_day": 35,
     "vision_night": 35,
-    "harvest": "demihuman",
+    "harvest": "nether_huntsman",
     "weakpoint_sets": [ "wps_humanoid_body", "wps_nether_huntsman" ],
     "families": [ "prof_wp_netherium_abomination" ],
     "path_settings": { "max_dist": 35, "allow_open_doors": false, "avoid_traps": false, "avoid_sharp": true },
