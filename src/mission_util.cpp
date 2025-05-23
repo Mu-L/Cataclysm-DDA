@@ -417,7 +417,7 @@ mission_target_params mission_util::parse_mission_om_target( const JsonObject &j
         jo.throw_error_at( "search_range",
                            "There's no reason to change max search range if your search isn't random." );
     }
-    p.search_range  = get_dbl_or_var( jo, "search_range", false, OMAPX * 14 );
+    p.search_range  = get_dbl_or_var( jo, "search_range", false, OMAPX * 3 );
     p.min_distance  = get_dbl_or_var( jo, "min_distance", false );
 
     if( jo.has_member( "offset_x" ) || jo.has_member( "offset_y" ) || jo.has_member( "offset_z" ) ) {
@@ -532,7 +532,7 @@ bool mission_util::load_funcs( const JsonObject &jo,
     return true;
 }
 
-bool mission_type::parse_funcs( const JsonObject &jo, const std::string_view src,
+bool mission_type::parse_funcs( const JsonObject &jo, std::string_view src,
                                 std::function<void( mission * )> &phase_func )
 {
     std::vector<std::function<void( mission *miss )>> funcs;
