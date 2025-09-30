@@ -4262,7 +4262,7 @@ void overmap::spawn_mongroup( const tripoint_om_sm &p, const mongroup_id &type, 
 {
     tripoint_om_ms submap_origin = project_to<coords::ms>( p );
     point_rel_ms cursor{ 0, 0 };
-    while( count ) {
+    while( count > 0 ) {
         for( MonsterGroupResult &result : MonsterGroupManager::GetResultFromGroup( type, &count ) ) {
             for( int i = 0; i < result.pack_size; ++i ) {
 
@@ -4304,8 +4304,9 @@ void overmap::move_hordes()
          mon_end = hordes.end(); mon != mon_end; ) {
         // This might have an issue where a monster prevented from acting possibly should
         // get another chance to act?
-        if( mon->second.last_processed == calendar::turn ||
-            mon->second.get_type()->has_flag( mon_flag_DORMANT ) ) {
+        // This is here so that when a entity moves from one bucket to another it doesn't
+        // get a second set of moves.
+        if( mon->second.last_processed == calendar::turn ) {
             mon++;
             continue;
         }
@@ -4319,11 +4320,12 @@ void overmap::move_hordes()
                 continue;
             }
             std::vector<tripoint_abs_ms> viable_candidates;
-            // TODO: wandering, pathing.
-            tripoint_abs_ms candidate = line_to( mon->first, mon->second.destination ).front();
             // Call up to overmapbuffer in case it needs to dispatch to an adjacent overmap.
-            if( overmap_buffer.passable( candidate ) ) {
-                viable_candidates.push_back( candidate );
+            for( const tripoint_abs_ms &candidate :
+                 squares_closer_to( mon->first, mon->second.destination ) ) {
+                if( overmap_buffer.passable( candidate ) ) {
+                    viable_candidates.push_back( candidate );
+                }
             }
             if( viable_candidates.empty() ) {
                 // We're stuck.
@@ -4336,6 +4338,8 @@ void overmap::move_hordes()
             if( viable_candidates.front() == mon->second.destination ) {
                 mon->second.tracking_intensity = 0;
             }
+            // squares_closer_to already orders candidates by how close to the main line they are.
+            // For now just pick the first non-blocked square, later we could fuzz/stumble.
             if( get_map().inbounds( viable_candidates.front() ) ) {
                 monster *placed_monster = nullptr;
                 if( mon->second.monster_data ) {
